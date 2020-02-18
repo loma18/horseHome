@@ -1,13 +1,17 @@
 const app = getApp()
 const CONFIG = require('../../config.js')
-const WXAPI = require('../../wxapi/main')
+const WXAPI = require('apifm-wxapi')
 const AUTH = require('../../utils/auth')
+const TOOLS = require('../../utils/tools.js')
 
 Page({
 	data: {
+    wxlogin: true,
+
     balance:0.00,
     freeze:0,
     score:0,
+    growth:0,
     score_sign_continuous:0,
     rechargeOpen: false // 是否开启充值[预存]功能
   },
@@ -29,32 +33,16 @@ Page({
       vipLevel: app.globalData.vipLevel
     })
     AUTH.checkHasLogined().then(isLogined => {
+      this.setData({
+        wxlogin: isLogined
+      })
       if (isLogined) {
-        _this.setData({
-          userInfo: wx.getStorageSync('userInfo')
-        })
         _this.getUserApiInfo();
         _this.getUserAmount();
       }
     })
-  },
-  onGotUserInfo(e){
-    if (!e.detail.userInfo) {
-      wx.showToast({
-        title: '您已取消登录',
-        icon: 'none',
-      })
-      return;
-    }
-    if (app.globalData.isConnected) {
-      wx.setStorageSync('userInfo', e.detail.userInfo)
-      AUTH.login(this);
-    } else {
-      wx.showToast({
-        title: '当前无网络',
-        icon: 'none',
-      })
-    }
+    // 获取购物车数据，显示TabBarBadge
+    TOOLS.showTabBarBadge();
   },
   aboutUs : function () {
     wx.showModal({
@@ -73,19 +61,17 @@ Page({
     if (!e.detail.errMsg || e.detail.errMsg != "getPhoneNumber:ok") {
       wx.showModal({
         title: '提示',
-        content: '无法获取手机号码:' + e.detail.errMsg,
+        content: e.detail.errMsg,
         showCancel: false
       })
       return;
     }
     var that = this;
-    WXAPI.bindMobile({
-      token: wx.getStorageSync('token'),
-      encryptedData: e.detail.encryptedData,
-      iv: e.detail.iv
-    }).then(function (res) {
+    WXAPI.bindMobileWxa(wx.getStorageSync('token'), e.detail.encryptedData, e.detail.iv).then(function (res) {
       if (res.code === 10002) {
-        app.goLoginPageTimeOut()
+        this.setData({
+          wxlogin: false
+        })
         return
       }
       if (res.code == 0) {
@@ -124,7 +110,8 @@ Page({
         that.setData({
           balance: res.data.balance.toFixed(2),
           freeze: res.data.freeze.toFixed(2),
-          score: res.data.score
+          score: res.data.score,
+          growth: res.data.growth
         });
       }
     })
@@ -143,5 +130,25 @@ Page({
     wx.navigateTo({
       url: "/pages/order-list/index?type=" + e.currentTarget.dataset.type
     })
-  }
+  },
+  cancelLogin() {
+    this.setData({
+      wxlogin: true
+    })
+  },
+  goLogin() {
+    this.setData({
+      wxlogin: false
+    })
+  },
+  processLogin(e) {
+    if (!e.detail.userInfo) {
+      wx.showToast({
+        title: '已取消',
+        icon: 'none',
+      })
+      return;
+    }
+    AUTH.register(this);
+  },
 })
